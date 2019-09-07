@@ -1,0 +1,37 @@
+{
+    "version": "1.0.0",
+    "name": "@noxify/gridsome-source-git",
+    "description": "Git source for Gridsome",
+    "main": "index.js",
+    "keywords": [
+        "gridsome",
+        "gridsome-source",
+        "git"
+    ],
+    "author": "Marcus Reinhardt <webstone@gmail.com>",
+    "homepage": "https://github.com/noxify/gridsome-source-git",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/noxify/gridsome-source-git.git"
+    },
+    "bugs": {
+        "url": "https://github.com/noxify/gridsome-source-git/issues"
+    },
+    "dependencies": {
+        "chokidar": "^3.0.2",
+        "fs-extra": "^8.1.0",
+        "globby": "^10.0.1",
+        "lodash": "^4.17.15",
+        "slash": "^3.0.0",
+        "fast-glob": "^3.0.4",
+        "git-url-parse": "^11.1.2",
+        "rimraf": "^3.0.0",
+        "simple-git": "^1.126.0"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "engines": {
+        "node": ">=8"
+    }
+}
