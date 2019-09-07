@@ -5,6 +5,7 @@
     "main": "index.js",
     "keywords": [
         "gridsome",
+        "gridsome-plugin",
         "gridsome-source",
         "git"
     ],
