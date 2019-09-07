@@ -3,6 +3,10 @@
     "name": "@noxify/gridsome-source-git",
     "description": "Git source for Gridsome",
     "main": "index.js",
+    "license": "MIT",
+    "publishConfig": {
+        "access": "public"
+    },
     "keywords": [
         "gridsome",
         "gridsome-plugin",
@@ -28,9 +32,6 @@
         "git-url-parse": "^11.1.2",
         "rimraf": "^3.0.0",
         "simple-git": "^1.126.0"
-    },
-    "publishConfig": {
-        "access": "public"
     },
     "engines": {
         "node": ">=8"
