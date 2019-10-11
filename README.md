@@ -46,6 +46,11 @@ module.exports = {
 | index      | `array`  | See [@gridsome/source-filesystem docs](https://github.com/gridsome/gridsome/blob/master/packages/source-filesystem/README.md#index)      | `['index']` |
 | refs       | `Object` | See [@gridsome/source-filesystem docs](https://github.com/gridsome/gridsome/blob/master/packages/source-filesystem/README.md#refs)       | `{}`        |
 
+## Routes
+
+Since gridsome 0.7.7 you can define your routes via templates.
+Detailed introductions can be found here: (https://gridsome.org/docs/templates/)
+
 ## Credits
 
 Special thanks goes to
