@@ -1,14 +1,17 @@
 const path = require('path')
 const fs = require('fs-extra')
 const slash = require('slash')
+const crypto = require('crypto')
 const Git = require("simple-git/promise");
 const fastGlob = require("fast-glob");
 const GitUrlParse = require("git-url-parse");
-const _ = require('lodash');
-
+const mime = require('mime-types');
 const {
-    mapValues
-} = require('lodash')
+    _,
+    mapValues,
+    trim,
+    trimEnd
+} = require('lodash');
 
 const isDev = process.env.NODE_ENV === 'development'
 
@@ -31,89 +34,66 @@ class GitSource {
     constructor(api, options) {
         this.api = api
         this.options = options
-        this.store = api.store
         this.context = options.baseDir ?
             api.resolve(options.baseDir) :
             api.context
         this.refsCache = {}
 
-        api.loadSource(async () => {
+        api.loadSource(async (actions) => {
             const importFiles = await this.getRemoteFiles()
-            this.createContentTypes()
-            await this.createNodes(importFiles)
+            this.createCollections(actions)
+            await this.createNodes(importFiles, actions)
         })
     }
 
-    createContentTypes() {
+    createCollections(actions) {
+
         this.refs = this.normalizeRefs(this.options.refs)
 
-        this.contentType = this.store.addContentType({
-            typeName: this.options.typeName,
-            route: this.options.route
+        this.collection = actions.addCollection({
+            typeName: this.options.typeName
         })
 
         mapValues(this.refs, (ref, key) => {
-            this.contentType.addReference(key, ref.typeName)
+            this.collection.addReference(key, ref.typeName)
 
             if (ref.create) {
-                this.store.addContentType({
-                    typeName: ref.typeName,
-                    route: ref.route
+                actions.addCollection({
+                    typeName: ref.typeName
                 })
             }
         })
     }
 
-    async createNodes(files) {
+    async createNodes(files, actions) {
         const glob = require('globby')
 
         await Promise.all(files.map(async file => {
-            const options = await this.createNodeOptions(path.join(this.options.target,file))
-            const node = this.contentType.addNode(options)
+            const options = await this.createNodeOptions(path.join(this.options.target, file), actions)
+            const node = this.collection.addNode(options)
 
-            this.createNodeRefs(node)
+            this.createNodeRefs(node, actions)
         }))
     }
 
-    async createNodeRefs(node) {
-        for (const fieldName in this.refs) {
-            const ref = this.refs[fieldName]
-
-            if (ref.create && node[fieldName]) {
-                const value = node[fieldName]
-                const typeName = ref.typeName
-
-                if (Array.isArray(value)) {
-                    value.forEach(value =>
-                        this.addRefNode(typeName, fieldName, value)
-                    )
-                } else {
-                    this.addRefNode(typeName, fieldName, value)
-                }
-            }
-        }
-    }
-
     // helpers
-    async createNodeOptions(file) {
-        const origin = path.join(this.context, file)
+    async createNodeOptions(file, actions) {
         const relPath = path.relative(this.context, file)
-        const mimeType = this.store.mime.lookup(file) || `application/x-${path.extname(file).replace('.', '')}`
+        const origin = path.join(this.context, file)
         const content = await fs.readFile(origin, 'utf8')
-        const id = this.store.makeUid(relPath)
         const {
             dir,
             name,
             ext = ''
         } = path.parse(file)
-        const routePath = this.createPath({
-            dir,
-            name
-        })
+        const mimeType = mime.lookup(file) || `application/x-${ext.replace('.', '')}`
 
         return {
-            id,
-            path: routePath,
+            id: this.createUid(relPath),
+            path: this.createPath({
+                dir,
+                name
+            }, actions),
             fileInfo: {
                 extension: ext,
                 directory: dir,
@@ -128,51 +108,68 @@ class GitSource {
         }
     }
 
-    addRefNode(typeName, fieldName, value) {
+    async createNodeRefs(actions, node) {
+        for (const fieldName in this.refs) {
+            const ref = this.refs[fieldName]
+
+            if (ref.create && node[fieldName]) {
+                const value = node[fieldName]
+                const typeName = ref.typeName
+
+                if (Array.isArray(value)) {
+                    value.forEach(value =>
+                        this.addRefNode(actions, typeName, fieldName, value)
+                    )
+                } else {
+                    this.addRefNode(actions, typeName, fieldName, value)
+                }
+            }
+        }
+    }
+
+    addRefNode(typeName, fieldName, value, actions) {
+        const getCollection = actions.getCollection || actions.getContentType
         const cacheKey = `${typeName}-${fieldName}-${value}`
 
         if (!this.refsCache[cacheKey] && value) {
             this.refsCache[cacheKey] = true
 
-            this.store
-                .getContentType(typeName)
-                .addNode({
-                    id: value,
-                    title: value
-                })
+            getCollection(typeName).addNode({
+                id: value,
+                title: value
+            })
         }
     }
 
     createPath({
         dir,
         name
-    }) {
+    }, actions) {
         const {
-            route,
-            pathPrefix = '/'
-        } = this.options
+            permalinks = {}
+        } = this.api.config
+        const pathPrefix = trim(this.options.pathPrefix, '/')
+        const pathSuffix = permalinks.trailingSlash ? '/' : ''
 
-        if (route) return
-
-        const joinedPath = path.join(pathPrefix, dir)
-        const segments = slash(joinedPath)
-            .split('/')
-            .filter(v => v)
-            .map(s => this.store.slugify(s))
+        const segments = slash(dir).split('/').map(segment => {
+            return actions.slugify(segment)
+        })
 
         if (!this.options.index.includes(name)) {
-            segments.push(this.store.slugify(name))
+            segments.push(actions.slugify(name))
         }
 
-        return `/${segments.join('/')}`
+        if (pathPrefix) {
+            segments.unshift(pathPrefix)
+        }
+
+        const res = trimEnd('/' + segments.filter(Boolean).join('/'), '/')
+
+        return (res + pathSuffix) || '/'
     }
 
     normalizeRefs(refs) {
-        const {
-            slugify
-        } = this.store
-
-        return mapValues(refs, (ref, key) => {
+        return mapValues(refs, (ref) => {
             if (typeof ref === 'string') {
                 ref = {
                     typeName: ref,
@@ -185,7 +182,6 @@ class GitSource {
             }
 
             if (ref.create) {
-                ref.route = ref.route || `/${slugify(ref.typeName)}/:slug`
                 ref.create = true
             } else {
                 ref.create = false
@@ -193,6 +189,10 @@ class GitSource {
 
             return ref
         })
+    }
+
+    createUid(orgId) {
+        return crypto.createHash('md5').update(orgId).digest('hex')
     }
 
     //Git

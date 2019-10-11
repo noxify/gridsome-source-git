@@ -1,5 +1,5 @@
 {
-    "version": "1.0.2",
+    "version": "1.1.0",
     "name": "@noxify/gridsome-source-git",
     "description": "Git source for Gridsome",
     "main": "index.js",
@@ -23,15 +23,16 @@
         "url": "https://github.com/noxify/gridsome-source-git/issues"
     },
     "dependencies": {
-        "chokidar": "^3.0.2",
+        "chokidar": "^3.2.1",
         "fs-extra": "^8.1.0",
         "globby": "^10.0.1",
         "lodash": "^4.17.15",
         "slash": "^3.0.0",
-        "fast-glob": "^3.0.4",
+        "fast-glob": "^3.1.0",
         "git-url-parse": "^11.1.2",
         "rimraf": "^3.0.0",
-        "simple-git": "^1.126.0"
+        "simple-git": "^1.126.0",
+        "mime-types": "^2.1.24"
     },
     "engines": {
         "node": ">=8"
