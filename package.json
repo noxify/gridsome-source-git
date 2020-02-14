@@ -1,5 +1,5 @@
 {
-    "version": "1.1.1",
+    "version": "2.0.0",
     "name": "@noxify/gridsome-source-git",
     "description": "Git source for Gridsome",
     "main": "index.js",
