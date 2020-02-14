@@ -2,9 +2,7 @@ const path = require('path')
 const fs = require('fs-extra')
 const slash = require('slash')
 const crypto = require('crypto')
-const Git = require("simple-git/promise");
 const fastGlob = require("fast-glob");
-const GitUrlParse = require("git-url-parse");
 const mime = require('mime-types');
 const {
     _,
@@ -13,7 +11,8 @@ const {
     trimEnd
 } = require('lodash');
 
-const isDev = process.env.NODE_ENV === 'development'
+const git = require('isomorphic-git');
+git.plugins.set('fs', fs)
 
 class GitSource {
     static defaultOptions() {
@@ -21,10 +20,14 @@ class GitSource {
             remote: undefined,
             branch: undefined,
             target: undefined,
-            pattern:['**/*'],
+            pattern: ['**/*'],
             baseDir: undefined,
-            route: undefined,
             pathPrefix: undefined,
+            privateRepo: false,
+            credentials: {
+                username: null,
+                token: null
+            },
             index: ['index'],
             typeName: 'GitNode',
             refs: {}
@@ -201,22 +204,14 @@ class GitSource {
             this.context,
             this.options.target
         );
-        const parsedRemote = GitUrlParse(this.options.remote);
-            
-        let repo;
+
         try {
-            repo = await this.getRepo(localPath, this.options.remote, this.options.branch);
+            await this.getRepo(localPath, this.options);
         } catch (e) {
             console.log(e);
             return [];
         }
-        
-        parsedRemote.git_suffix = false;
-        parsedRemote.webLink = parsedRemote.toString("https");
-        delete parsedRemote.git_suffix;
-        let ref = await repo.raw(["rev-parse", "--abbrev-ref", "HEAD"]);
-        parsedRemote.ref = ref.trim();
-        
+
         const repoFiles = await fastGlob(this.options.pattern, {
             cwd: localPath,
             absolute: false
@@ -225,45 +220,72 @@ class GitSource {
         return repoFiles;
     }
 
-    async isAlreadyCloned(remote, path) {
-        const existingRemote = await Git(path).listRemote(["--get-url"]);
-        return existingRemote.trim() == remote.trim();
+    async isAlreadyCloned(path) {
+        const existingRemote = await git.listRemotes({
+            dir: path
+        });
+
+        return _.find(existingRemote, {
+            url: this.options.remote.trim()
+        }) !== undefined;
     }
 
-    async getTargetBranch(repo, branch) {
-        if (typeof branch == 'string') {
-            return `origin/${branch}`;
-        } else {
-            return repo.raw(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']);
+    async getRepo(path) {
+
+        let repoOptions = {
+            dir: path,
+        };
+
+        //add credentials to clone a private repo
+        if (this.options.privateRepo) {
+            repoOptions.username = this.options.credentials.username;
+            repoOptions.token = this.options.credentials.token
         }
-    }
 
-    async getRepo(path, remote, branch) {
-        // If the directory doesn't exist or is empty
+        //use proxy if defined
+        if (this.options.proxy) {
+            repoOptions.corsProxy = this.options.proxy;
+        }
+
+        let cloneOptions = {
+            url: this.options.remote,
+            singleBranch: true,
+            depth: 1,
+            ...repoOptions
+        }
+
+        //use defined branch
+        if (this.options.branch) {
+            cloneOptions.ref = this.options.branch;
+        }
+
         if (!fs.existsSync(path) || fs.readdirSync(path).length === 0) {
-            let opts = ['--depth', '1'];
-            if (typeof branch == 'string') {
-                opts.push('--branch', branch);
+            await git.clone(cloneOptions)
+        } else if (await this.isAlreadyCloned(path)) {
+            const currentBranch = await git.currentBranch({
+                dir: path,
+                fullname: false
+            });
+
+            if (this.options.branch && currentBranch != this.options.branch) {
+                currentBranch = this.options.branch;
             }
 
-            await Git().clone(remote, path, opts);
-            
-            return Git(path);
-        } else if (await this.isAlreadyCloned(remote, path)) {
-            const repo = await Git(path);
-            
-            const targetBranch = await this.getTargetBranch(repo, branch);
-                        
-            // Refresh our shallow clone with the latest commit.
-            await repo
-                .fetch(['--all'])
-                .then(() => {
-                    repo.reset(['--hard'])
-                    repo.checkout(_.trim(targetBranch))
-                    repo.pull('--allow-unrelated-histories')
-                });
-            
-            return repo;
+            repoOptions.ref = currentBranch;
+
+            //source: https://github.com/isomorphic-git/isomorphic-git/issues/129
+            fs.unlink(path + '/.git/index', (err) => {
+                //if something goes wrong, remove the dir
+                //and use `clone` instead of `checkout`
+                if (err) {
+                    fs.removeSync(path);
+                    git.clone(cloneOptions);
+                } else {
+                    // checkout the branch into the working tree
+                    git.checkout(repoOptions);
+                }
+            });
+
         } else {
             throw new Error(`Can't clone to target destination: ${this.options.target}`);
         }
