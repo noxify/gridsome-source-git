@@ -262,12 +262,12 @@ class GitSource {
         if (!fs.existsSync(path) || fs.readdirSync(path).length === 0) {
             await git.clone(cloneOptions)
         } else if (await this.isAlreadyCloned(path)) {
-            const currentBranch = await git.currentBranch({
+            let currentBranch = await git.currentBranch({
                 dir: path,
                 fullname: false
             });
 
-            if (this.options.branch && currentBranch != this.options.branch) {
+            if (this.options.branch && currentBranch !== this.options.branch) {
                 currentBranch = this.options.branch;
             }
 
