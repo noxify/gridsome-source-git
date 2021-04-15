@@ -30,7 +30,7 @@
         "isomorphic-git": "^0.78.4",
         "lodash": "^4.17.15",
         "mime-types": "^2.1.26",
-        "slash": "^3.0.0"
+        "slash": "^4.0.0"
     },
     "engines": {
         "node": ">=8"
